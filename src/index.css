@@ -27,8 +27,8 @@ body{
   min-height:100vh;
   padding: 28px 20px 60px;
   background-image:
-    radial-gradient(circle at 15% 8%, rgba(242,179,61,0.07), transparent 40%),
-    radial-gradient(circle at 90% 85%, rgba(178,58,58,0.08), transparent 45%);
+    radial-gradient(circle at 50% -8%, rgba(242,179,61,0.06), transparent 55%),
+    linear-gradient(165deg, #1B1815 0%, #221A26 52%, #17130F 100%);
 }
 button{ touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 .wrap{ max-width: 1180px; margin: 0 auto; }
@@ -215,6 +215,7 @@ video.mirror{ transform: scaleX(-1); }
   color: #241900;
   font-weight:600;
 }
+.seg button:disabled{ opacity:0.4; cursor:default; }
 
 .swatch-row{
   min-width: 0;
@@ -283,6 +284,42 @@ video.mirror{ transform: scaleX(-1); }
   text-decoration: underline;
   cursor:pointer; padding: 2px 0;
   margin-top: 2px;
+}
+
+.filter-toggle-btn{
+  width: 100%;
+  margin-top: 10px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--line);
+  color: var(--text-dim);
+  font-family:'Space Grotesk',sans-serif;
+  font-size: 12px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: left;
+}
+.filter-toggle-btn:hover{ color: var(--text-warm); border-color: rgba(242,179,61,0.4); }
+
+.shot-confirm-overlay{
+  position:absolute; inset:0;
+  background:#0e0c0a;
+  display:flex; align-items:center; justify-content:center;
+  z-index: 4;
+}
+.shot-confirm-canvas{
+  width:100%; height:100%;
+  object-fit: cover;
+}
+.shot-confirm-actions{
+  position:relative;
+  display:flex; gap:10px; margin-top:12px;
+}
+.shot-confirm-actions .ghost-btn{ flex: 0 0 auto; }
+.shutter-btn.small{
+  padding: 14px;
+  font-size: 15px;
+  flex: 1 1 auto;
 }
 
 .preview-block{

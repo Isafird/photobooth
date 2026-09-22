@@ -33,28 +33,56 @@ const SLIDERS = [
 const BEAUTY_SLIDER = { key: 'smooth', label: 'Halus & glow', min: 0, max: 100, unit: '%' }
 
 const FRAMES = [
-  { id: 'none',     label: 'Tanpa bingkai', style: 'none',     swatchBg: '#0e0c0a' },
-  { id: 'polaroid', label: 'Polaroid',      style: 'polaroid', swatchBg: '#F0E6D2' },
-  { id: 'film',     label: 'Film strip',    style: 'film',     swatchBg: '#111111' },
-  { id: 'amber',    label: 'Amber',         style: 'mat', color: '#F2B33D', border: '#fff6e3', swatchBg: '#F2B33D' },
-  { id: 'plum',     label: 'Plum',          style: 'mat', color: '#3B2142', border: '#efe0c9', swatchBg: '#3B2142' },
-  { id: 'mint',     label: 'Mint',          style: 'mat', color: '#4F7C6B', border: '#f2ede0', swatchBg: '#4F7C6B' },
-  { id: 'blush',    label: 'Blush',         style: 'mat', color: '#D98A8A', border: '#fff3ec', swatchBg: '#D98A8A' },
-  { id: 'ocean',    label: 'Ocean',         style: 'mat', color: '#2C5B73', border: '#eaf4f7', swatchBg: '#2C5B73' },
-  { id: 'scallop',  label: 'Scallop',       style: 'scallop', swatchBg: '#FFFFFF' },
-  { id: 'ticket',   label: 'Tiket',         style: 'ticket',  swatchBg: '#EFE6D2' },
-  { id: 'neon',     label: 'Neon',          style: 'neon',    swatchBg: '#150E1F' },
-  { id: 'washi',    label: 'Scrapbook',     style: 'washi',   swatchBg: '#F3ECDD' },
-  { id: 'mono',     label: 'Mono Dot',      style: 'mono',    swatchBg: '#FFFFFF' },
+  { id: 'none',      label: 'Tanpa bingkai', style: 'none',     swatchBg: '#0e0c0a' },
+  { id: 'polaroid',  label: 'Polaroid',      style: 'polaroid', swatchBg: '#F0E6D2' },
+  { id: 'film',      label: 'Film strip',    style: 'film',     swatchBg: '#111111' },
+  { id: 'sunset',    label: 'Sunset',        style: 'sunset',   swatchBg: 'linear-gradient(135deg,#FF6F91,#FF9F45,#FFD56B)' },
+  { id: 'holo',      label: 'Holographic',   style: 'holo',     swatchBg: 'linear-gradient(135deg,#7F5AF0,#2CB1BC,#FF61D2,#FFD166)' },
+  { id: 'gold',      label: 'Gold Foil',     style: 'gold',     swatchBg: 'linear-gradient(135deg,#B8860B,#F9E9B0,#D4AF37)' },
+  { id: 'confetti',  label: 'Confetti',      style: 'confetti', swatchBg: '#F3ECDD' },
+  { id: 'stamp',     label: 'Perangko',      style: 'stamp',    swatchBg: '#EDE0C8' },
+  { id: 'amber',     label: 'Amber',         style: 'mat', color: '#F2B33D', border: '#fff6e3', swatchBg: '#F2B33D' },
+  { id: 'plum',      label: 'Plum',          style: 'mat', color: '#3B2142', border: '#efe0c9', swatchBg: '#3B2142' },
+  { id: 'mint',      label: 'Mint',          style: 'mat', color: '#4F7C6B', border: '#f2ede0', swatchBg: '#4F7C6B' },
+  { id: 'blush',     label: 'Blush',         style: 'mat', color: '#D98A8A', border: '#fff3ec', swatchBg: '#D98A8A' },
+  { id: 'ocean',     label: 'Ocean',         style: 'mat', color: '#2C5B73', border: '#eaf4f7', swatchBg: '#2C5B73' },
+  { id: 'scallop',   label: 'Scallop',       style: 'scallop', swatchBg: '#FFFFFF' },
+  { id: 'ticket',    label: 'Tiket',         style: 'ticket',  swatchBg: '#EFE6D2' },
+  { id: 'neon',      label: 'Neon',          style: 'neon',    swatchBg: '#150E1F' },
+  { id: 'washi',     label: 'Scrapbook',     style: 'washi',   swatchBg: '#F3ECDD' },
+  { id: 'mono',      label: 'Mono Dot',      style: 'mono',    swatchBg: '#FFFFFF' },
 ]
 const PREVIEW_FRAME = FRAMES.find(f => f.id === 'none')
 
 const LAYOUTS = [
-  { id: 'single', label: 'Single',   shots: 1, cols: 1, rows: 1, cellW: 640, cellH: 480 },
-  { id: 'strip3', label: 'Strip 3',  shots: 3, cols: 1, rows: 3, cellW: 380, cellH: 285 },
-  { id: 'strip4', label: 'Strip 4',  shots: 4, cols: 1, rows: 4, cellW: 380, cellH: 285 },
-  { id: 'grid',   label: 'Grid 2x2', shots: 4, cols: 2, rows: 2, cellW: 320, cellH: 240 },
+  { id: 'single', label: 'Single',   shots: 1, cols: 1, rows: 1 },
+  { id: 'strip3', label: 'Strip 3',  shots: 3, cols: 1, rows: 3 },
+  { id: 'strip4', label: 'Strip 4',  shots: 4, cols: 1, rows: 4 },
+  { id: 'grid',   label: 'Grid 2x2', shots: 4, cols: 2, rows: 2 },
 ]
+// small + fast, used only for the live "before you shoot" preview
+const PREVIEW_CELL = { single: [640, 480], strip3: [380, 285], strip4: [380, 285], grid: [320, 240] }
+// upper bound per layout (4:3) — the actual capture uses the phone's real camera
+// resolution up to this cap, so it scales with whatever the device/browser provides
+const CAPTURE_CAP = { single: [3840, 2880], strip3: [1600, 1200], strip4: [1600, 1200], grid: [1280, 960] }
+function withCell(layout, cell) { return { ...layout, cellW: cell[0], cellH: cell[1] } }
+
+// picks the largest 4:3 cell that fits the video's actual native camera resolution,
+// capped by CAPTURE_CAP so multi-shot layouts stay a reasonable file size —
+// this is what makes the download match the phone's real camera output
+function resolveCaptureCell(layoutId, video) {
+  const [capW, capH] = CAPTURE_CAP[layoutId]
+  const targetRatio = capW / capH
+  const nativeW = video?.videoWidth || capW
+  const nativeH = video?.videoHeight || capH
+  const nativeRatio = nativeW / nativeH
+  let w, h
+  if (nativeRatio > targetRatio) { h = nativeH; w = Math.round(h * targetRatio) }
+  else { w = nativeW; h = Math.round(w / targetRatio) }
+  if (w > capW) { w = capW; h = Math.round(capW / targetRatio) }
+  if (h > capH) { h = capH; w = Math.round(capH * targetRatio) }
+  return [w, h]
+}
 
 const TIMER_OPTIONS = [
   { value: 0,  label: 'Tanpa' },
@@ -67,23 +95,6 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
 
 function buildFilterCss(v) {
   return `brightness(${v.brightness}%) contrast(${v.contrast}%) saturate(${v.saturate}%) hue-rotate(${v.hue}deg) sepia(${v.sepia}%) grayscale(${v.grayscale}%)`
-}
-
-// professional-style skin smoothing: blends a slightly blurred, slightly
-// brightened copy using soft-light so skin looks smoother without the
-// whole photo turning blurry — edges/eyes/hair stay sharp underneath
-function drawSkinGlow(ctx, cell, x, y, w, h, smoothPct, filterCss) {
-  if (smoothPct <= 0) return
-  const layer = document.createElement('canvas')
-  layer.width = w; layer.height = h
-  const lctx = layer.getContext('2d')
-  lctx.filter = `${filterCss} blur(${(smoothPct / 100 * 2.4).toFixed(2)}px) brightness(1.03)`
-  lctx.drawImage(cell, 0, 0, w, h)
-  ctx.save()
-  ctx.globalAlpha = Math.min(0.55, smoothPct / 100 * 0.6)
-  ctx.globalCompositeOperation = 'soft-light'
-  ctx.drawImage(layer, x, y, w, h)
-  ctx.restore()
 }
 
 function roundRectPath(ctx, x, y, w, h, r) {
@@ -121,6 +132,75 @@ function drawTape(ctx, cx, cy, w, h, angleDeg, color) {
   ctx.restore()
 }
 
+function drawSparkleStar(ctx, cx, cy, size, color, alpha = 1) {
+  ctx.save()
+  ctx.globalAlpha = alpha
+  ctx.fillStyle = color
+  ctx.beginPath()
+  ctx.moveTo(cx, cy - size)
+  ctx.lineTo(cx + size * 0.28, cy - size * 0.28)
+  ctx.lineTo(cx + size, cy)
+  ctx.lineTo(cx + size * 0.28, cy + size * 0.28)
+  ctx.lineTo(cx, cy + size)
+  ctx.lineTo(cx - size * 0.28, cy + size * 0.28)
+  ctx.lineTo(cx - size, cy)
+  ctx.lineTo(cx - size * 0.28, cy - size * 0.28)
+  ctx.closePath()
+  ctx.fill()
+  ctx.restore()
+}
+
+function drawConfettiPiece(ctx, cx, cy, size, angleDeg, color, shape) {
+  ctx.save()
+  ctx.translate(cx, cy)
+  ctx.rotate(angleDeg * Math.PI / 180)
+  ctx.fillStyle = color
+  if (shape === 'circle') {
+    ctx.beginPath(); ctx.arc(0, 0, size / 2, 0, Math.PI * 2); ctx.fill()
+  } else {
+    ctx.fillRect(-size / 2, -size / 4, size, size / 2)
+  }
+  ctx.restore()
+}
+
+const CONFETTI_SPOTS = [
+  { xf: 0.06, yf: 0.05, size: 10, angle: 20,  color: '#F2B33D', shape: 'rect' },
+  { xf: 0.92, yf: 0.06, size: 8,  angle: -30, color: '#B23A3A', shape: 'circle' },
+  { xf: 0.05, yf: 0.94, size: 9,  angle: 50,  color: '#4F7C6B', shape: 'rect' },
+  { xf: 0.94, yf: 0.93, size: 11, angle: -10, color: '#3B2142', shape: 'circle' },
+  { xf: 0.5,  yf: 0.03, size: 7,  angle: 5,   color: '#D98A8A', shape: 'circle' },
+  { xf: 0.5,  yf: 0.97, size: 8,  angle: -20, color: '#F2B33D', shape: 'rect' },
+  { xf: 0.03, yf: 0.5,  size: 8,  angle: 40,  color: '#2C5B73', shape: 'circle' },
+  { xf: 0.97, yf: 0.5,  size: 9,  angle: -45, color: '#B23A3A', shape: 'rect' },
+  { xf: 0.16, yf: 0.02, size: 6,  angle: 0,   color: '#3B2142', shape: 'circle' },
+  { xf: 0.84, yf: 0.02, size: 7,  angle: 15,  color: '#4F7C6B', shape: 'rect' },
+  { xf: 0.15, yf: 0.98, size: 7,  angle: -25, color: '#F2B33D', shape: 'circle' },
+  { xf: 0.85, yf: 0.98, size: 8,  angle: 35,  color: '#D98A8A', shape: 'rect' },
+]
+const SPARKLE_SPOTS = [
+  { xf: 0.08, yf: 0.1,  size: 9 }, { xf: 0.9, yf: 0.08, size: 7 },
+  { xf: 0.12, yf: 0.85, size: 7 }, { xf: 0.88, yf: 0.88, size: 10 },
+  { xf: 0.5, yf: 0.06, size: 6 },  { xf: 0.06, yf: 0.5, size: 6 },
+  { xf: 0.94, yf: 0.5, size: 6 },  { xf: 0.5, yf: 0.94, size: 7 },
+]
+
+// professional-style skin smoothing: blends a slightly blurred, slightly
+// brightened copy using soft-light so skin looks smoother without the
+// whole photo turning blurry — edges/eyes/hair stay sharp underneath
+function drawSkinGlow(ctx, cell, x, y, w, h, smoothPct, filterCss) {
+  if (smoothPct <= 0) return
+  const layer = document.createElement('canvas')
+  layer.width = w; layer.height = h
+  const lctx = layer.getContext('2d')
+  lctx.filter = `${filterCss} blur(${(smoothPct / 100 * 2.4).toFixed(2)}px) brightness(1.03)`
+  lctx.drawImage(cell, 0, 0, w, h)
+  ctx.save()
+  ctx.globalAlpha = Math.min(0.55, smoothPct / 100 * 0.6)
+  ctx.globalCompositeOperation = 'soft-light'
+  ctx.drawImage(layer, x, y, w, h)
+  ctx.restore()
+}
+
 function frameGeometry(frame, layout) {
   switch (frame.style) {
     case 'none':     return { pad: { t: 0, r: 0, b: 0, l: 0 }, gap: 6, radius: 6 }
@@ -132,6 +212,11 @@ function frameGeometry(frame, layout) {
     case 'neon':     return { pad: { t: 26, r: 26, b: 26, l: 26 }, gap: 10, radius: 18 }
     case 'washi':    return { pad: { t: 24, r: 24, b: 24, l: 24 }, gap: 10, radius: 14 }
     case 'mono':     return { pad: { t: 26, r: 26, b: 26, l: 26 }, gap: 8, radius: 8 }
+    case 'sunset':   return { pad: { t: 18, r: 18, b: 18, l: 18 }, gap: 10, radius: 18 }
+    case 'holo':     return { pad: { t: 28, r: 28, b: 28, l: 28 }, gap: 10, radius: 20 }
+    case 'gold':     return { pad: { t: 20, r: 20, b: 20, l: 20 }, gap: 10, radius: 14 }
+    case 'confetti': return { pad: { t: 30, r: 30, b: 30, l: 30 }, gap: 10, radius: 14 }
+    case 'stamp':    return { pad: { t: 26, r: 26, b: 26, l: 26 }, gap: 10, radius: 0 }
     default:         return { pad: { t: 16, r: 16, b: 16, l: 16 }, gap: 10, radius: 12 }
   }
 }
@@ -169,8 +254,11 @@ function composeOutput(rawCells, layout, filterCss, frame, smoothPct = 0) {
   out.width = W; out.height = H
   const ctx = out.getContext('2d')
 
-  const cellBorder = frame.style === 'mat'
-  const cellBorderColor = frame.border
+  const cellBorder = frame.style === 'mat' || frame.style === 'sunset' || frame.style === 'holo' || frame.style === 'gold'
+  const cellBorderColor = frame.style === 'mat' ? frame.border
+    : frame.style === 'sunset' ? '#FFF6E9'
+    : frame.style === 'holo' ? '#FFFFFF'
+    : frame.style === 'gold' ? '#FFF8E7' : '#FFFFFF'
 
   if (frame.style === 'none') {
     // transparent
@@ -179,6 +267,18 @@ function composeOutput(rawCells, layout, filterCss, frame, smoothPct = 0) {
     scallopedRectPath(ctx, 14, 14, W - 28, H - 28, 13)
     ctx.fillStyle = '#FFFFFF'
     ctx.fill()
+    ctx.restore()
+  } else if (frame.style === 'stamp') {
+    ctx.save()
+    scallopedRectPath(ctx, 10, 10, W - 20, H - 20, 7)
+    ctx.fillStyle = '#EDE0C8'
+    ctx.fill()
+    ctx.restore()
+    ctx.save()
+    ctx.setLineDash([5, 5])
+    ctx.strokeStyle = '#8C7A54'
+    ctx.lineWidth = 1.5
+    ctx.strokeRect(20, 20, W - 40, H - 40)
     ctx.restore()
   } else if (frame.style === 'ticket') {
     ctx.fillStyle = '#EFE6D2'
@@ -231,8 +331,50 @@ function composeOutput(rawCells, layout, filterCss, frame, smoothPct = 0) {
       ctx.beginPath(); ctx.arc(W - 12, yy, 1.6, 0, Math.PI * 2); ctx.fill()
     }
     ctx.restore()
+  } else if (frame.style === 'sunset') {
+    ctx.save()
+    roundRectPath(ctx, 0, 0, W, H, radius)
+    ctx.clip()
+    const grad = ctx.createLinearGradient(0, 0, W, H)
+    grad.addColorStop(0, '#FF6F91'); grad.addColorStop(0.5, '#FF9F45'); grad.addColorStop(1, '#FFD56B')
+    ctx.fillStyle = grad
+    ctx.fillRect(0, 0, W, H)
+    ctx.restore()
+  } else if (frame.style === 'holo') {
+    ctx.save()
+    roundRectPath(ctx, 0, 0, W, H, radius)
+    ctx.fillStyle = '#1b1330'
+    ctx.fill()
+    ctx.clip()
+    const grad = ctx.createLinearGradient(0, 0, W, H)
+    grad.addColorStop(0, '#7F5AF0'); grad.addColorStop(0.35, '#2CB1BC'); grad.addColorStop(0.68, '#FF61D2'); grad.addColorStop(1, '#FFD166')
+    ctx.globalAlpha = 0.88
+    ctx.fillStyle = grad
+    ctx.fillRect(0, 0, W, H)
+    ctx.globalAlpha = 1
+    ctx.restore()
+    SPARKLE_SPOTS.forEach(s => drawSparkleStar(ctx, s.xf * W, s.yf * H, s.size, '#FFFFFF', 0.85))
+  } else if (frame.style === 'gold') {
+    ctx.save()
+    roundRectPath(ctx, 0, 0, W, H, radius)
+    ctx.clip()
+    const grad = ctx.createLinearGradient(0, 0, W, H)
+    grad.addColorStop(0, '#B8860B'); grad.addColorStop(0.5, '#F9E9B0'); grad.addColorStop(1, '#D4AF37')
+    ctx.fillStyle = grad
+    ctx.fillRect(0, 0, W, H)
+    ctx.restore()
+    ctx.save()
+    ctx.strokeStyle = 'rgba(120,84,10,0.55)'
+    ctx.lineWidth = 1.5
+    roundRectPath(ctx, 8, 8, W - 16, H - 16, Math.max(0, radius - 4))
+    ctx.stroke()
+    ctx.restore()
   } else {
-    const bg = frame.style === 'film' ? '#111111' : (frame.style === 'mat' ? frame.color : (frame.style === 'washi' ? '#F3ECDD' : '#F0E6D2'))
+    // polaroid, film, mat, washi, confetti
+    const bg = frame.style === 'film' ? '#111111'
+      : frame.style === 'mat' ? frame.color
+      : (frame.style === 'washi' || frame.style === 'confetti') ? '#F3ECDD'
+      : '#F0E6D2'
     ctx.save()
     roundRectPath(ctx, 0, 0, W, H, radius)
     ctx.clip()
@@ -277,6 +419,8 @@ function composeOutput(rawCells, layout, filterCss, frame, smoothPct = 0) {
   } else if (frame.style === 'washi') {
     drawTape(ctx, padLeft * 0.85, padTop * 0.85, 92, 34, -10, 'rgba(242,179,61,0.85)')
     drawTape(ctx, W - padRight * 0.85, H - padBottom * 0.85, 92, 34, 12, 'rgba(178,58,58,0.55)')
+  } else if (frame.style === 'confetti') {
+    CONFETTI_SPOTS.forEach(c => drawConfettiPiece(ctx, c.xf * W, c.yf * H, c.size, c.angle, c.color, c.shape))
   }
 
   return out
@@ -288,12 +432,16 @@ export default function App() {
   const flashRef = useRef(null)
   const outputCanvasRef = useRef(null)
   const previewCanvasRef = useRef(null)
+  const pendingCanvasRef = useRef(null)
   const streamRef = useRef(null)
   const stateRef = useRef({})
+  const pendingCellsRef = useRef([])
+  const captureCellRef = useRef(CAPTURE_CAP.single)
 
   const [stage, setStage] = useState('shoot') // 'shoot' | 'review'
   const [filterValues, setFilterValues] = useState({ ...DEFAULT_VALUES })
   const [activePreset, setActivePreset] = useState('none')
+  const [slidersOpen, setSlidersOpen] = useState(false)
   const [layoutId, setLayoutId] = useState('single')
   const [timerSec, setTimerSec] = useState(3)
   const [busy, setBusy] = useState(false)
@@ -302,7 +450,11 @@ export default function App() {
   const [facingMode, setFacingMode] = useState('user')
   const [switchingCam, setSwitchingCam] = useState(false)
 
+  const [captureIndex, setCaptureIndex] = useState(0)
+  const [pendingCell, setPendingCell] = useState(null)
+
   const [capturedCells, setCapturedCells] = useState(null)
+  const [capturedLayout, setCapturedLayout] = useState(null)
   const [capturedFilterCss, setCapturedFilterCss] = useState('none')
   const [capturedSmooth, setCapturedSmooth] = useState(0)
   const [reviewFrame, setReviewFrame] = useState('polaroid')
@@ -311,6 +463,7 @@ export default function App() {
   const layout = LAYOUTS.find(l => l.id === layoutId)
   const filterCss = buildFilterCss(filterValues)
   const mirror = facingMode === 'user'
+  const isCapturing = busy || !!pendingCell
 
   stateRef.current = { layout, filterCss, smooth: filterValues.smooth, busy, permDenied, stage, mirror }
 
@@ -319,7 +472,7 @@ export default function App() {
     streamRef.current?.getTracks().forEach(t => t.stop())
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: useFacing, width: { ideal: 1280 }, height: { ideal: 960 } },
+        video: { facingMode: useFacing, width: { ideal: 4096 }, height: { ideal: 3072 } },
         audio: false,
       })
       streamRef.current = stream
@@ -331,7 +484,7 @@ export default function App() {
   }
 
   async function flipCamera() {
-    if (switchingCam || busy) return
+    if (switchingCam || isCapturing) return
     setSwitchingCam(true)
     const next = facingMode === 'user' ? 'environment' : 'user'
     await startCamera(next)
@@ -348,16 +501,17 @@ export default function App() {
     if (videoRef.current) videoRef.current.style.filter = filterCss
   }, [filterCss])
 
-  // live "before you shoot" preview (layout + filter only, no frame yet)
+  // live "before you shoot" preview (layout + filter only, no frame yet) — uses the small preview resolution for speed
   useEffect(() => {
     const id = setInterval(() => {
       const { layout: l, filterCss: css, smooth: sm, busy: b, permDenied: pd, stage: st, mirror: mr } = stateRef.current
       const video = videoRef.current
       const canvas = previewCanvasRef.current
       if (st !== 'shoot' || !video || !canvas || b || pd || video.readyState < 2) return
-      const cell = captureRaw(video, l.cellW, l.cellH, mr)
-      const cells = Array.from({ length: l.shots }, () => cell)
-      const composed = composeOutput(cells, l, css, PREVIEW_FRAME, sm)
+      const previewLayout = withCell(l, PREVIEW_CELL[l.id])
+      const cell = captureRaw(video, previewLayout.cellW, previewLayout.cellH, mr)
+      const cells = Array.from({ length: previewLayout.shots }, () => cell)
+      const composed = composeOutput(cells, previewLayout, css, PREVIEW_FRAME, sm)
       canvas.width = composed.width
       canvas.height = composed.height
       canvas.getContext('2d').drawImage(composed, 0, 0)
@@ -365,16 +519,28 @@ export default function App() {
     return () => clearInterval(id)
   }, [])
 
+  // draw the just-taken shot (full filter + glow applied) into the confirm overlay
+  useEffect(() => {
+    if (!pendingCell) return
+    const canvas = pendingCanvasRef.current
+    if (!canvas) return
+    const w = pendingCell.width, h = pendingCell.height
+    canvas.width = w; canvas.height = h
+    const ctx = canvas.getContext('2d')
+    ctx.save(); ctx.filter = filterCss; ctx.drawImage(pendingCell, 0, 0, w, h); ctx.restore()
+    drawSkinGlow(ctx, pendingCell, 0, 0, w, h, filterValues.smooth, filterCss)
+  }, [pendingCell, filterCss, filterValues.smooth])
+
   // recompose the review canvas whenever the captured photos or chosen frame change
   useEffect(() => {
-    if (stage !== 'review' || !capturedCells) return
-    const composed = composeOutput(capturedCells, layout, capturedFilterCss, FRAMES.find(f => f.id === reviewFrame), capturedSmooth)
+    if (stage !== 'review' || !capturedCells || !capturedLayout) return
+    const composed = composeOutput(capturedCells, capturedLayout, capturedFilterCss, FRAMES.find(f => f.id === reviewFrame), capturedSmooth)
     const canvas = outputCanvasRef.current
     if (!canvas) return
     canvas.width = composed.width
     canvas.height = composed.height
     canvas.getContext('2d').drawImage(composed, 0, 0)
-  }, [stage, capturedCells, capturedFilterCss, capturedSmooth, reviewFrame, layout])
+  }, [stage, capturedCells, capturedLayout, capturedFilterCss, capturedSmooth, reviewFrame])
 
   function applyPreset(f) {
     setFilterValues({ ...f.values, smooth: filterValues.smooth })
@@ -411,27 +577,51 @@ export default function App() {
     el.classList.add('fire')
   }
 
-  async function handleShutter() {
-    if (busy || !streamRef.current) return
+  // captures ONE shot at full resolution, then pauses and shows a confirm/retake screen
+  async function captureOneShot(idx) {
     setBusy(true)
-
-    const cells = []
-    for (let i = 0; i < layout.shots; i++) {
-      setShotStatus(layout.shots > 1 ? `foto ${i + 1} dari ${layout.shots}` : 'bersiap...')
-      if (timerSec > 0) await runCountdown(timerSec)
-      fireFlash()
-      await sleep(90)
-      cells.push(captureRaw(videoRef.current, layout.cellW, layout.cellH, mirror))
-      await sleep(220)
-    }
-
-    setShotStatus('selesai')
-    setCapturedCells(cells)
-    setCapturedFilterCss(filterCss)
-    setCapturedSmooth(filterValues.smooth)
-    setOutputNote('Pilih bingkai, lalu unduh.')
+    setCaptureIndex(idx)
+    setShotStatus(layout.shots > 1 ? `foto ${idx + 1} dari ${layout.shots}` : 'bersiap...')
+    if (timerSec > 0) await runCountdown(timerSec)
+    fireFlash()
+    await sleep(90)
+    const captureLayout = withCell(layout, captureCellRef.current)
+    const cell = captureRaw(videoRef.current, captureLayout.cellW, captureLayout.cellH, mirror)
     setBusy(false)
-    setStage('review')
+    setPendingCell(cell)
+  }
+
+  function handleShutter() {
+    if (isCapturing || !streamRef.current) return
+    pendingCellsRef.current = []
+    // lock in the capture resolution for this whole sequence, based on the
+    // phone's actual current camera feed (so it matches the real device)
+    captureCellRef.current = resolveCaptureCell(layout.id, videoRef.current)
+    captureOneShot(0)
+  }
+
+  function handleRetakeShot() {
+    if (busy) return
+    setPendingCell(null)
+    captureOneShot(captureIndex)
+  }
+
+  function handleNextShot() {
+    if (!pendingCell) return
+    const cells = [...pendingCellsRef.current, pendingCell]
+    pendingCellsRef.current = cells
+    setPendingCell(null)
+    if (captureIndex + 1 < layout.shots) {
+      captureOneShot(captureIndex + 1)
+    } else {
+      setShotStatus('selesai')
+      setCapturedCells(cells)
+      setCapturedLayout(withCell(layout, captureCellRef.current))
+      setCapturedFilterCss(filterCss)
+      setCapturedSmooth(filterValues.smooth)
+      setOutputNote('Pilih bingkai, lalu unduh.')
+      setStage('review')
+    }
   }
 
   function handleRetake() {
@@ -469,9 +659,14 @@ export default function App() {
           <div className="booth">
             <div className="screen">
               <video ref={videoRef} autoPlay playsInline muted className={mirror ? 'mirror' : ''} />
+              {pendingCell && (
+                <div className="shot-confirm-overlay">
+                  <canvas ref={pendingCanvasRef} className="shot-confirm-canvas"></canvas>
+                </div>
+              )}
               <div className="countdown-num" ref={countNumRef}></div>
               <div className="flash-overlay" ref={flashRef}></div>
-              <button className="flip-cam-btn" onClick={flipCamera} disabled={switchingCam || busy} aria-label="Ganti kamera">⟲</button>
+              <button className="flip-cam-btn" onClick={flipCamera} disabled={switchingCam || isCapturing} aria-label="Ganti kamera">⟲</button>
               {permDenied && (
                 <div className="perm-msg">
                   <div>Butuh izin kamera untuk mulai motret.</div>
@@ -483,6 +678,14 @@ export default function App() {
               <span><span className="rec-dot"></span>LIVE VIEWFINDER</span>
               <span>{shotStatus}</span>
             </div>
+            {pendingCell && (
+              <div className="shot-confirm-actions">
+                <button className="ghost-btn" onClick={handleRetakeShot}>↺ Ambil ulang</button>
+                <button className="shutter-btn small" onClick={handleNextShot}>
+                  {captureIndex + 1 < layout.shots ? 'Lanjut ke foto berikutnya' : 'Selesai, lihat hasil'}
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="rail">
@@ -490,7 +693,7 @@ export default function App() {
               <span className="group-title">Jenis foto</span>
               <div className="seg">
                 {LAYOUTS.map(l => (
-                  <button key={l.id} className={l.id === layoutId ? 'active' : ''} onClick={() => setLayoutId(l.id)}>
+                  <button key={l.id} className={l.id === layoutId ? 'active' : ''} disabled={isCapturing} onClick={() => setLayoutId(l.id)}>
                     {l.label}
                   </button>
                 ))}
@@ -516,43 +719,49 @@ export default function App() {
                 ))}
               </div>
 
-              <div className="filter-sliders">
-                {SLIDERS.map(s => (
-                  <div className="slider-row" key={s.key}>
-                    <div className="slider-label">
-                      <span>{s.label}</span>
-                      <span className="slider-value">{filterValues[s.key]}{s.unit}</span>
+              <button className="filter-toggle-btn" onClick={() => setSlidersOpen(v => !v)}>
+                {slidersOpen ? '▲ Sembunyikan atur manual' : '▾ Atur manual (kecerahan, kontras, dll)'}
+              </button>
+
+              {slidersOpen && (
+                <div className="filter-sliders">
+                  {SLIDERS.map(s => (
+                    <div className="slider-row" key={s.key}>
+                      <div className="slider-label">
+                        <span>{s.label}</span>
+                        <span className="slider-value">{filterValues[s.key]}{s.unit}</span>
+                      </div>
+                      <input type="range" min={s.min} max={s.max} value={filterValues[s.key]} onChange={e => adjustSlider(s.key, Number(e.target.value))} />
                     </div>
-                    <input type="range" min={s.min} max={s.max} value={filterValues[s.key]} onChange={e => adjustSlider(s.key, Number(e.target.value))} />
-                  </div>
-                ))}
+                  ))}
 
-                <div className="slider-row beauty-row">
-                  <div className="slider-label">
-                    <span>{BEAUTY_SLIDER.label}</span>
-                    <span className="slider-value">{filterValues.smooth}{BEAUTY_SLIDER.unit}</span>
+                  <div className="slider-row beauty-row">
+                    <div className="slider-label">
+                      <span>{BEAUTY_SLIDER.label}</span>
+                      <span className="slider-value">{filterValues.smooth}{BEAUTY_SLIDER.unit}</span>
+                    </div>
+                    <input type="range" min={BEAUTY_SLIDER.min} max={BEAUTY_SLIDER.max} value={filterValues.smooth} onChange={e => adjustSlider('smooth', Number(e.target.value))} />
+                    <div className="slider-note">Efek halus profesional (soft-light blend) — tidak menurunkan ketajaman foto seperti blur biasa.</div>
                   </div>
-                  <input type="range" min={BEAUTY_SLIDER.min} max={BEAUTY_SLIDER.max} value={filterValues.smooth} onChange={e => adjustSlider('smooth', Number(e.target.value))} />
-                  <div className="slider-note">Efek halus profesional (soft-light blend) — tidak menurunkan ketajaman foto seperti blur biasa.</div>
+
+                  <button className="reset-link" onClick={resetFilters}>Reset filter ke Asli</button>
                 </div>
-
-                <button className="reset-link" onClick={resetFilters}>Reset filter ke Asli</button>
-              </div>
+              )}
             </div>
 
             <div>
               <span className="group-title">Hitung mundur</span>
               <div className="seg">
                 {TIMER_OPTIONS.map(t => (
-                  <button key={t.value} className={t.value === timerSec ? 'active' : ''} onClick={() => setTimerSec(t.value)}>
+                  <button key={t.value} className={t.value === timerSec ? 'active' : ''} disabled={isCapturing} onClick={() => setTimerSec(t.value)}>
                     {t.label}
                   </button>
                 ))}
               </div>
             </div>
 
-            <button className="shutter-btn" onClick={handleShutter} disabled={busy || permDenied}>Jepret</button>
-            <div className="shutter-hint">{layout.shots === 1 ? '1 foto akan diambil' : `${layout.shots} foto berurutan akan diambil`}</div>
+            <button className="shutter-btn" onClick={handleShutter} disabled={isCapturing || permDenied}>Jepret</button>
+            <div className="shutter-hint">{layout.shots === 1 ? '1 foto akan diambil' : `${layout.shots} foto berurutan — tiap foto bisa diambil ulang`}</div>
           </div>
         </div>
       ) : (
@@ -574,7 +783,7 @@ export default function App() {
               </div>
             </div>
             <div className="output-note">{outputNote}</div>
-            <button className="shutter-btn" onClick={handleDownload}>Unduh foto</button>
+            <button className="shutter-btn" onClick={handleDownload}>Unduh foto (HD)</button>
             <button className="ghost-btn" onClick={handleRetake}>Jepret ulang</button>
           </div>
         </div>
