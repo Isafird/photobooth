@@ -52,7 +52,23 @@ const FRAMES = [
   { id: 'washi',     label: 'Scrapbook',     style: 'washi',   swatchBg: '#F3ECDD' },
   { id: 'mono',      label: 'Mono Dot',      style: 'mono',    swatchBg: '#FFFFFF' },
 ]
-const PREVIEW_FRAME = FRAMES.find(f => f.id === 'none')
+
+// starting sticker library — the user can add their own text/emoji or upload
+// an image sticker on top of this (feature: custom stickers)
+const DEFAULT_STICKERS = [
+  { id: 'heart',   kind: 'emoji', content: '❤️' },
+  { id: 'sparkle', kind: 'emoji', content: '✨' },
+  { id: 'star',    kind: 'emoji', content: '⭐' },
+  { id: 'flower',  kind: 'emoji', content: '🌸' },
+  { id: 'ribbon',  kind: 'emoji', content: '🎀' },
+  { id: 'balloon', kind: 'emoji', content: '🎈' },
+  { id: 'party',   kind: 'emoji', content: '🎉' },
+  { id: 'cloud',   kind: 'emoji', content: '☁️' },
+  { id: 'clover',  kind: 'emoji', content: '🍀' },
+  { id: 'sun',     kind: 'emoji', content: '☀️' },
+  { id: 'moon',    kind: 'emoji', content: '🌙' },
+  { id: 'fire',    kind: 'emoji', content: '🔥' },
+]
 
 const LAYOUTS = [
   { id: 'single', label: 'Single',   shots: 1, cols: 1, rows: 1 },
@@ -60,27 +76,37 @@ const LAYOUTS = [
   { id: 'strip4', label: 'Strip 4',  shots: 4, cols: 1, rows: 4 },
   { id: 'grid',   label: 'Grid 2x2', shots: 4, cols: 2, rows: 2 },
 ]
-// small + fast, used only for the live "before you shoot" preview
-const PREVIEW_CELL = { single: [640, 480], strip3: [380, 285], strip4: [380, 285], grid: [320, 240] }
-// upper bound per layout (4:3) — the actual capture uses the phone's real camera
-// resolution up to this cap, so it scales with whatever the device/browser provides
+// upper bound (in total pixel area) per layout — the actual capture uses the
+// phone's real, currently-displayed aspect ratio, so it scales with whatever
+// the device/browser/orientation provides instead of a hardcoded ratio
 const CAPTURE_CAP = { single: [3840, 2880], strip3: [1600, 1200], strip4: [1600, 1200], grid: [1280, 960] }
 function withCell(layout, cell) { return { ...layout, cellW: cell[0], cellH: cell[1] } }
 
-// picks the largest 4:3 cell that fits the video's actual native camera resolution,
-// capped by CAPTURE_CAP so multi-shot layouts stay a reasonable file size —
-// this is what makes the download match the phone's real camera output
-function resolveCaptureCell(layoutId, video) {
+// picks the largest cell that fits the ratio the booth screen is ACTUALLY
+// showing right now (desktop landscape 4:3, mobile portrait 3:4, etc.),
+// capped by CAPTURE_CAP's pixel area so multi-shot layouts stay a reasonable
+// file size. Matching the on-screen ratio (instead of a fixed 4:3) is what
+// fixes the "photo looks zoomed in" issue on phones.
+function resolveCaptureCell(layoutId, video, screenEl) {
   const [capW, capH] = CAPTURE_CAP[layoutId]
-  const targetRatio = capW / capH
+  let targetRatio = capW / capH
+  const rect = screenEl?.getBoundingClientRect()
+  if (rect && rect.width > 0 && rect.height > 0) targetRatio = rect.width / rect.height
+
   const nativeW = video?.videoWidth || capW
   const nativeH = video?.videoHeight || capH
   const nativeRatio = nativeW / nativeH
   let w, h
   if (nativeRatio > targetRatio) { h = nativeH; w = Math.round(h * targetRatio) }
   else { w = nativeW; h = Math.round(w / targetRatio) }
-  if (w > capW) { w = capW; h = Math.round(capW / targetRatio) }
-  if (h > capH) { h = capH; w = Math.round(capH * targetRatio) }
+
+  const capArea = capW * capH
+  const area = w * h
+  if (area > capArea) {
+    const scale = Math.sqrt(capArea / area)
+    w = Math.round(w * scale)
+    h = Math.round(h * scale)
+  }
   return [w, h]
 }
 
@@ -93,8 +119,88 @@ const TIMER_OPTIONS = [
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
 
+// used only for the LIVE video preview, applied as a real CSS filter on the
+// <video> element — this always renders reliably in the browser
 function buildFilterCss(v) {
   return `brightness(${v.brightness}%) contrast(${v.contrast}%) saturate(${v.saturate}%) hue-rotate(${v.hue}deg) sepia(${v.sepia}%) grayscale(${v.grayscale}%)`
+}
+
+function clamp255(v) { return v < 0 ? 0 : v > 255 ? 255 : v }
+
+// Applies brightness/contrast/saturate/hue-rotate/sepia/grayscale by hand,
+// pixel by pixel, instead of relying on the canvas 2D `filter` property.
+// Canvas `filter` support is inconsistent on some phone WebViews/in-app
+// browsers, which is exactly why the downloaded photo used to come out with
+// no effect applied even though the live view looked filtered — this
+// guarantees the exported photo always matches what was previewed.
+function applyManualFilter(imageData, v) {
+  const d = imageData.data
+  const brightnessMul = v.brightness / 100
+  const contrastMul = v.contrast / 100
+  const saturateMul = v.saturate / 100
+  const hueRad = (v.hue || 0) * Math.PI / 180
+  const sepiaAmt = (v.sepia || 0) / 100
+  const grayAmt = (v.grayscale || 0) / 100
+  const cosH = Math.cos(hueRad), sinH = Math.sin(hueRad)
+
+  for (let i = 0; i < d.length; i += 4) {
+    let r = d[i], g = d[i + 1], b = d[i + 2]
+
+    r *= brightnessMul; g *= brightnessMul; b *= brightnessMul
+
+    r = (r - 128) * contrastMul + 128
+    g = (g - 128) * contrastMul + 128
+    b = (b - 128) * contrastMul + 128
+    r = clamp255(r); g = clamp255(g); b = clamp255(b)
+
+    if (hueRad !== 0) {
+      const nr = (0.213 + cosH * 0.787 - sinH * 0.213) * r + (0.715 - cosH * 0.715 - sinH * 0.715) * g + (0.072 - cosH * 0.072 + sinH * 0.928) * b
+      const ng = (0.213 - cosH * 0.213 + sinH * 0.143) * r + (0.715 + cosH * 0.285 + sinH * 0.140) * g + (0.072 - cosH * 0.072 - sinH * 0.283) * b
+      const nb = (0.213 - cosH * 0.213 - sinH * 0.787) * r + (0.715 - cosH * 0.715 + sinH * 0.715) * g + (0.072 + cosH * 0.928 + sinH * 0.072) * b
+      r = clamp255(nr); g = clamp255(ng); b = clamp255(nb)
+    }
+
+    if (saturateMul !== 1) {
+      const gray = 0.213 * r + 0.715 * g + 0.072 * b
+      r = clamp255(gray + (r - gray) * saturateMul)
+      g = clamp255(gray + (g - gray) * saturateMul)
+      b = clamp255(gray + (b - gray) * saturateMul)
+    }
+
+    if (sepiaAmt > 0) {
+      const sr = r * 0.393 + g * 0.769 + b * 0.189
+      const sg = r * 0.349 + g * 0.686 + b * 0.168
+      const sb = r * 0.272 + g * 0.534 + b * 0.131
+      r = clamp255(r + (sr - r) * sepiaAmt)
+      g = clamp255(g + (sg - g) * sepiaAmt)
+      b = clamp255(b + (sb - b) * sepiaAmt)
+    }
+
+    if (grayAmt > 0) {
+      const gy = 0.213 * r + 0.715 * g + 0.072 * b
+      r = r + (gy - r) * grayAmt
+      g = g + (gy - g) * grayAmt
+      b = b + (gy - b) * grayAmt
+    }
+
+    d[i] = clamp255(r); d[i + 1] = clamp255(g); d[i + 2] = clamp255(b)
+  }
+  return imageData
+}
+
+// draws `cell` into `ctx` at (x,y,w,h) with the color filter baked in
+// pixel-by-pixel, and returns the filtered offscreen canvas so callers (the
+// beauty-glow pass) can reuse the already-filtered pixels
+function drawCellWithFilter(ctx, cell, x, y, w, h, filterValues) {
+  const off = document.createElement('canvas')
+  off.width = w; off.height = h
+  const octx = off.getContext('2d')
+  octx.drawImage(cell, 0, 0, w, h)
+  const imgData = octx.getImageData(0, 0, w, h)
+  applyManualFilter(imgData, filterValues)
+  octx.putImageData(imgData, 0, 0)
+  ctx.drawImage(off, x, y, w, h)
+  return off
 }
 
 function roundRectPath(ctx, x, y, w, h, r) {
@@ -163,6 +269,15 @@ function drawConfettiPiece(ctx, cx, cy, size, angleDeg, color, shape) {
   ctx.restore()
 }
 
+function drawEmojiSticker(ctx, cx, cy, size, text) {
+  ctx.save()
+  ctx.font = `${size}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(text, cx, cy)
+  ctx.restore()
+}
+
 const CONFETTI_SPOTS = [
   { xf: 0.06, yf: 0.05, size: 10, angle: 20,  color: '#F2B33D', shape: 'rect' },
   { xf: 0.92, yf: 0.06, size: 8,  angle: -30, color: '#B23A3A', shape: 'circle' },
@@ -185,15 +300,15 @@ const SPARKLE_SPOTS = [
 ]
 
 // professional-style skin smoothing: blends a slightly blurred, slightly
-// brightened copy using soft-light so skin looks smoother without the
-// whole photo turning blurry — edges/eyes/hair stay sharp underneath
-function drawSkinGlow(ctx, cell, x, y, w, h, smoothPct, filterCss) {
+// brightened copy of the ALREADY color-filtered cell using soft-light so
+// skin looks smoother without the whole photo turning blurry
+function drawSkinGlow(ctx, filteredCell, x, y, w, h, smoothPct) {
   if (smoothPct <= 0) return
   const layer = document.createElement('canvas')
   layer.width = w; layer.height = h
   const lctx = layer.getContext('2d')
-  lctx.filter = `${filterCss} blur(${(smoothPct / 100 * 2.4).toFixed(2)}px) brightness(1.03)`
-  lctx.drawImage(cell, 0, 0, w, h)
+  lctx.filter = `blur(${(smoothPct / 100 * 2.4).toFixed(2)}px) brightness(1.03)`
+  lctx.drawImage(filteredCell, 0, 0, w, h)
   ctx.save()
   ctx.globalAlpha = Math.min(0.55, smoothPct / 100 * 0.6)
   ctx.globalCompositeOperation = 'soft-light'
@@ -201,29 +316,38 @@ function drawSkinGlow(ctx, cell, x, y, w, h, smoothPct, filterCss) {
   ctx.restore()
 }
 
-function frameGeometry(frame, layout) {
-  switch (frame.style) {
-    case 'none':     return { pad: { t: 0, r: 0, b: 0, l: 0 }, gap: 6, radius: 6 }
-    case 'polaroid': return { pad: { t: 26, r: 26, b: layout.rows > 1 ? 60 : 92, l: 26 }, gap: 10, radius: 14 }
-    case 'film':     return { pad: { t: 18, r: 34, b: 18, l: 34 }, gap: 4, radius: 4 }
-    case 'mat':      return { pad: { t: 16, r: 16, b: 16, l: 16 }, gap: 10, radius: 16 }
-    case 'scallop':  return { pad: { t: 36, r: 36, b: 36, l: 36 }, gap: 10, radius: 0 }
-    case 'ticket':   return { pad: { t: 22, r: 40, b: 22, l: 40 }, gap: 10, radius: 0 }
-    case 'neon':     return { pad: { t: 26, r: 26, b: 26, l: 26 }, gap: 10, radius: 18 }
-    case 'washi':    return { pad: { t: 24, r: 24, b: 24, l: 24 }, gap: 10, radius: 14 }
-    case 'mono':     return { pad: { t: 26, r: 26, b: 26, l: 26 }, gap: 8, radius: 8 }
-    case 'sunset':   return { pad: { t: 18, r: 18, b: 18, l: 18 }, gap: 10, radius: 18 }
-    case 'holo':     return { pad: { t: 28, r: 28, b: 28, l: 28 }, gap: 10, radius: 20 }
-    case 'gold':     return { pad: { t: 20, r: 20, b: 20, l: 20 }, gap: 10, radius: 14 }
-    case 'confetti': return { pad: { t: 30, r: 30, b: 30, l: 30 }, gap: 10, radius: 14 }
-    case 'stamp':    return { pad: { t: 26, r: 26, b: 26, l: 26 }, gap: 10, radius: 0 }
-    default:         return { pad: { t: 16, r: 16, b: 16, l: 16 }, gap: 10, radius: 12 }
+function frameGeometry(frame, layout, scale = 1) {
+  const g = (() => {
+    switch (frame.style) {
+      case 'none':     return { pad: { t: 0, r: 0, b: 0, l: 0 }, gap: 6, radius: 6 }
+      case 'polaroid': return { pad: { t: 26, r: 26, b: layout.rows > 1 ? 60 : 92, l: 26 }, gap: 10, radius: 14 }
+      case 'film':     return { pad: { t: 18, r: 34, b: 18, l: 34 }, gap: 4, radius: 4 }
+      case 'mat':      return { pad: { t: 16, r: 16, b: 16, l: 16 }, gap: 10, radius: 16 }
+      case 'scallop':  return { pad: { t: 36, r: 36, b: 36, l: 36 }, gap: 10, radius: 0 }
+      case 'ticket':   return { pad: { t: 22, r: 40, b: 22, l: 40 }, gap: 10, radius: 0 }
+      case 'neon':     return { pad: { t: 26, r: 26, b: 26, l: 26 }, gap: 10, radius: 18 }
+      case 'washi':    return { pad: { t: 24, r: 24, b: 24, l: 24 }, gap: 10, radius: 14 }
+      case 'mono':     return { pad: { t: 26, r: 26, b: 26, l: 26 }, gap: 8, radius: 8 }
+      case 'sunset':   return { pad: { t: 18, r: 18, b: 18, l: 18 }, gap: 10, radius: 18 }
+      case 'holo':     return { pad: { t: 28, r: 28, b: 28, l: 28 }, gap: 10, radius: 20 }
+      case 'gold':     return { pad: { t: 20, r: 20, b: 20, l: 20 }, gap: 10, radius: 14 }
+      case 'confetti': return { pad: { t: 30, r: 30, b: 30, l: 30 }, gap: 10, radius: 14 }
+      case 'stamp':    return { pad: { t: 26, r: 26, b: 26, l: 26 }, gap: 10, radius: 0 }
+      default:         return { pad: { t: 16, r: 16, b: 16, l: 16 }, gap: 10, radius: 12 }
+    }
+  })()
+  return {
+    pad: { t: g.pad.t * scale, r: g.pad.r * scale, b: g.pad.b * scale, l: g.pad.l * scale },
+    gap: g.gap,
+    radius: g.radius * scale,
   }
 }
 
-// capture one raw (unfiltered) frame at target size, cover-fit cropped.
-// mirrored only for the front ("user") camera, matching the selfie preview
-function captureRaw(video, w, h, mirror) {
+// capture one raw (unfiltered) frame at target size, cover-fit cropped from
+// the video's current native resolution. `zoom` further shrinks the source
+// rect for the digital-zoom fallback (used when the camera track has no
+// native zoom capability) — mirrored only for the front camera
+function captureRaw(video, w, h, mirror, zoom = 1) {
   const c = document.createElement('canvas')
   c.width = w; c.height = h
   const ctx = c.getContext('2d')
@@ -231,16 +355,24 @@ function captureRaw(video, w, h, mirror) {
   if (mirror) { ctx.translate(w, 0); ctx.scale(-1, 1) }
   const vw = video.videoWidth, vh = video.videoHeight
   const targetRatio = w / h, srcRatio = vw / vh
-  let sx, sy, sw, sh
-  if (srcRatio > targetRatio) { sh = vh; sw = vh * targetRatio; sx = (vw - sw) / 2; sy = 0 }
-  else { sw = vw; sh = vw / targetRatio; sx = 0; sy = (vh - sh) / 2 }
+  let sw, sh
+  if (srcRatio > targetRatio) { sh = vh; sw = vh * targetRatio }
+  else { sw = vw; sh = vw / targetRatio }
+  sw = sw / zoom
+  sh = sh / zoom
+  const sx = (vw - sw) / 2
+  const sy = (vh - sh) / 2
   ctx.drawImage(video, sx, sy, sw, sh, 0, 0, w, h)
   ctx.restore()
   return c
 }
 
-function composeOutput(rawCells, layout, filterCss, frame, smoothPct = 0) {
-  const geo = frameGeometry(frame, layout)
+// `placedStickers`: [{ kind:'emoji'|'image', content, img, xf, yf, size }]
+// xf/yf are 0..1 fractions of the final image; size is a % of the final
+// image width. These come straight from the draggable overlay in the UI so
+// stickers land in the exact same place the user dropped them.
+function composeOutput(rawCells, layout, filterValues, frame, frameScale, placedStickers) {
+  const geo = frameGeometry(frame, layout, frameScale)
   const { t: padTop, r: padRight, b: padBottom, l: padLeft } = geo.pad
   const gap = geo.gap
   const radius = geo.radius
@@ -393,11 +525,8 @@ function composeOutput(rawCells, layout, filterCss, frame, smoothPct = 0) {
       ctx.fillStyle = cellBorderColor
       ctx.fillRect(x - 4, y - 4, layout.cellW + 8, layout.cellH + 8)
     }
-    ctx.save()
-    ctx.filter = filterCss
-    ctx.drawImage(cell, x, y, layout.cellW, layout.cellH)
-    ctx.restore()
-    drawSkinGlow(ctx, cell, x, y, layout.cellW, layout.cellH, smoothPct, filterCss)
+    const filtered = drawCellWithFilter(ctx, cell, x, y, layout.cellW, layout.cellH, filterValues)
+    drawSkinGlow(ctx, filtered, x, y, layout.cellW, layout.cellH, filterValues.smooth || 0)
   })
 
   if (frame.style === 'film') {
@@ -423,20 +552,37 @@ function composeOutput(rawCells, layout, filterCss, frame, smoothPct = 0) {
     CONFETTI_SPOTS.forEach(c => drawConfettiPiece(ctx, c.xf * W, c.yf * H, c.size, c.angle, c.color, c.shape))
   }
 
+  // stickers (#7): drawn exactly where the user dragged them in the overlay,
+  // xf/yf/size are fractions of the final image so the mapping is 1:1
+  placedStickers.forEach(s => {
+    const cx = s.xf * W, cy = s.yf * H
+    const sizePx = (s.size / 100) * W
+    if (s.kind === 'image' && s.img && s.img.complete && s.img.naturalWidth) {
+      const ratio = s.img.naturalWidth / s.img.naturalHeight
+      const w = sizePx, h = sizePx / ratio
+      ctx.drawImage(s.img, cx - w / 2, cy - h / 2, w, h)
+    } else if (s.kind !== 'image') {
+      drawEmojiSticker(ctx, cx, cy, sizePx, s.content)
+    }
+  })
+
   return out
 }
 
 export default function App() {
   const videoRef = useRef(null)
+  const screenRef = useRef(null)
   const countNumRef = useRef(null)
   const flashRef = useRef(null)
   const outputCanvasRef = useRef(null)
-  const previewCanvasRef = useRef(null)
   const pendingCanvasRef = useRef(null)
   const streamRef = useRef(null)
-  const stateRef = useRef({})
   const pendingCellsRef = useRef([])
   const captureCellRef = useRef(CAPTURE_CAP.single)
+  const overlayRef = useRef(null)
+  const [previewWidth, setPreviewWidth] = useState(0)
+  const uidRef = useRef(0)
+  function nextUid(prefix) { uidRef.current += 1; return `${prefix}-${uidRef.current}` }
 
   const [stage, setStage] = useState('shoot') // 'shoot' | 'review'
   const [filterValues, setFilterValues] = useState({ ...DEFAULT_VALUES })
@@ -447,37 +593,81 @@ export default function App() {
   const [busy, setBusy] = useState(false)
   const [permDenied, setPermDenied] = useState(false)
   const [shotStatus, setShotStatus] = useState('siap')
-  const [facingMode, setFacingMode] = useState('user')
   const [switchingCam, setSwitchingCam] = useState(false)
+
+  // camMode: 'front' | 'back' | 'wide'. camGroups holds the actual detected
+  // MediaDeviceInfo per category once the browser exposes device labels
+  // (only available after camera permission has been granted at least once)
+  const [camMode, setCamMode] = useState('front')
+  const [camGroups, setCamGroups] = useState({ front: null, back: null, wide: null })
+  const [zoom, setZoom] = useState(1)
+  const [zoomCaps, setZoomCaps] = useState(null) // {min,max,step} when the track supports real zoom, else null (digital fallback)
 
   const [captureIndex, setCaptureIndex] = useState(0)
   const [pendingCell, setPendingCell] = useState(null)
 
   const [capturedCells, setCapturedCells] = useState(null)
   const [capturedLayout, setCapturedLayout] = useState(null)
-  const [capturedFilterCss, setCapturedFilterCss] = useState('none')
-  const [capturedSmooth, setCapturedSmooth] = useState(0)
+  const [capturedFilterValues, setCapturedFilterValues] = useState({ ...DEFAULT_VALUES })
   const [reviewFrame, setReviewFrame] = useState('polaroid')
+  const [reviewFrameScale, setReviewFrameScale] = useState(1)
   const [outputNote, setOutputNote] = useState('')
+
+  // sticker library (presets + anything the user has typed/uploaded) and the
+  // instances actually placed & dragged onto the current photo
+  const [stickerLibrary, setStickerLibrary] = useState(DEFAULT_STICKERS)
+  const [placedStickers, setPlacedStickers] = useState([])
+  const [activeStickerId, setActiveStickerId] = useState(null)
+  const [draggingId, setDraggingId] = useState(null)
+  const [customStickerText, setCustomStickerText] = useState('')
 
   const layout = LAYOUTS.find(l => l.id === layoutId)
   const filterCss = buildFilterCss(filterValues)
-  const mirror = facingMode === 'user'
+  const mirror = camMode === 'front'
   const isCapturing = busy || !!pendingCell
+  const zoomMin = zoomCaps?.min ?? 1
+  const zoomMax = zoomCaps?.max ?? 3
+  const zoomStep = zoomCaps?.step ?? 0.1
 
-  stateRef.current = { layout, filterCss, smooth: filterValues.smooth, busy, permDenied, stage, mirror }
-
-  async function startCamera(facing) {
-    const useFacing = facing || facingMode
-    streamRef.current?.getTracks().forEach(t => t.stop())
+  async function enumerateCams() {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: useFacing, width: { ideal: 4096 }, height: { ideal: 3072 } },
-        audio: false,
+      const devices = await navigator.mediaDevices.enumerateDevices()
+      const vids = devices.filter(d => d.kind === 'videoinput')
+      let front = null, back = null, wide = null
+      vids.forEach(d => {
+        const label = d.label.toLowerCase()
+        if (!front && /front|user|depan|face/.test(label)) front = d
+        else if (!wide && /ultra|wide angle|superwide|0\.5x/.test(label)) wide = d
+        else if (!back && /back|rear|environment|belakang/.test(label)) back = d
       })
+      setCamGroups({ front, back, wide })
+    } catch {
+      // enumerateDevices can fail/be unavailable — camera still works via facingMode fallback
+    }
+  }
+
+  async function startCamera(mode) {
+    const useMode = mode || camMode
+    streamRef.current?.getTracks().forEach(t => t.stop())
+    const device = camGroups[useMode]
+    const videoConstraints = device
+      ? { deviceId: { exact: device.deviceId }, width: { ideal: 4096 }, height: { ideal: 3072 } }
+      : { facingMode: useMode === 'front' ? 'user' : 'environment', width: { ideal: 4096 }, height: { ideal: 3072 } }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints, audio: false })
       streamRef.current = stream
       if (videoRef.current) videoRef.current.srcObject = stream
       setPermDenied(false)
+      const track = stream.getVideoTracks()[0]
+      const caps = track.getCapabilities ? track.getCapabilities() : null
+      if (caps && caps.zoom && caps.zoom.max > caps.zoom.min) {
+        setZoomCaps({ min: caps.zoom.min, max: caps.zoom.max, step: caps.zoom.step || 0.1 })
+        setZoom(Math.min(caps.zoom.max, Math.max(caps.zoom.min, 1)))
+      } else {
+        setZoomCaps(null)
+        setZoom(1)
+      }
+      if (!device) await enumerateCams()
     } catch (err) {
       setPermDenied(true)
     }
@@ -486,14 +676,31 @@ export default function App() {
   async function flipCamera() {
     if (switchingCam || isCapturing) return
     setSwitchingCam(true)
-    const next = facingMode === 'user' ? 'environment' : 'user'
+    const next = camMode === 'front' ? 'back' : 'front'
     await startCamera(next)
-    setFacingMode(next)
+    setCamMode(next)
     setSwitchingCam(false)
   }
 
+  async function selectCamera(mode) {
+    if (switchingCam || isCapturing || mode === camMode) return
+    setSwitchingCam(true)
+    await startCamera(mode)
+    setCamMode(mode)
+    setSwitchingCam(false)
+  }
+
+  function setZoomValue(v) {
+    const clamped = Math.min(zoomMax, Math.max(zoomMin, v))
+    setZoom(clamped)
+    if (zoomCaps) {
+      const track = streamRef.current?.getVideoTracks()?.[0]
+      track?.applyConstraints?.({ advanced: [{ zoom: clamped }] }).catch(() => {})
+    }
+  }
+
   useEffect(() => {
-    startCamera('user')
+    startCamera('front')
     return () => { streamRef.current?.getTracks().forEach(t => t.stop()) }
   }, [])
 
@@ -501,23 +708,15 @@ export default function App() {
     if (videoRef.current) videoRef.current.style.filter = filterCss
   }, [filterCss])
 
-  // live "before you shoot" preview (layout + filter only, no frame yet) — uses the small preview resolution for speed
+  // mirrors the front camera + applies digital zoom (feature #5 fallback)
+  // to the live video display; matches captureRaw's crop math exactly so
+  // what's on screen is always what gets captured
   useEffect(() => {
-    const id = setInterval(() => {
-      const { layout: l, filterCss: css, smooth: sm, busy: b, permDenied: pd, stage: st, mirror: mr } = stateRef.current
-      const video = videoRef.current
-      const canvas = previewCanvasRef.current
-      if (st !== 'shoot' || !video || !canvas || b || pd || video.readyState < 2) return
-      const previewLayout = withCell(l, PREVIEW_CELL[l.id])
-      const cell = captureRaw(video, previewLayout.cellW, previewLayout.cellH, mr)
-      const cells = Array.from({ length: previewLayout.shots }, () => cell)
-      const composed = composeOutput(cells, previewLayout, css, PREVIEW_FRAME, sm)
-      canvas.width = composed.width
-      canvas.height = composed.height
-      canvas.getContext('2d').drawImage(composed, 0, 0)
-    }, 200)
-    return () => clearInterval(id)
-  }, [])
+    if (!videoRef.current) return
+    const digitalScale = zoomCaps ? 1 : zoom
+    const mirrorSign = mirror ? -1 : 1
+    videoRef.current.style.transform = `scaleX(${mirrorSign * digitalScale}) scaleY(${digitalScale})`
+  }, [mirror, zoom, zoomCaps])
 
   // draw the just-taken shot (full filter + glow applied) into the confirm overlay
   useEffect(() => {
@@ -527,20 +726,42 @@ export default function App() {
     const w = pendingCell.width, h = pendingCell.height
     canvas.width = w; canvas.height = h
     const ctx = canvas.getContext('2d')
-    ctx.save(); ctx.filter = filterCss; ctx.drawImage(pendingCell, 0, 0, w, h); ctx.restore()
-    drawSkinGlow(ctx, pendingCell, 0, 0, w, h, filterValues.smooth, filterCss)
-  }, [pendingCell, filterCss, filterValues.smooth])
+    const filtered = drawCellWithFilter(ctx, pendingCell, 0, 0, w, h, filterValues)
+    drawSkinGlow(ctx, filtered, 0, 0, w, h, filterValues.smooth || 0)
+  }, [pendingCell, filterValues])
 
-  // recompose the review canvas whenever the captured photos or chosen frame change
+  // recompose the review canvas whenever the captured photos, frame, frame
+  // size or stickers change
   useEffect(() => {
     if (stage !== 'review' || !capturedCells || !capturedLayout) return
-    const composed = composeOutput(capturedCells, capturedLayout, capturedFilterCss, FRAMES.find(f => f.id === reviewFrame), capturedSmooth)
+    const composed = composeOutput(
+      capturedCells, capturedLayout, capturedFilterValues,
+      FRAMES.find(f => f.id === reviewFrame), reviewFrameScale, placedStickers
+    )
     const canvas = outputCanvasRef.current
     if (!canvas) return
     canvas.width = composed.width
     canvas.height = composed.height
     canvas.getContext('2d').drawImage(composed, 0, 0)
-  }, [stage, capturedCells, capturedLayout, capturedFilterCss, capturedSmooth, reviewFrame])
+  }, [stage, capturedCells, capturedLayout, capturedFilterValues, reviewFrame, reviewFrameScale, placedStickers])
+
+  // tracks the review canvas's actual on-screen width so sticker size (set
+  // as a % of the final image) can be converted to real px in the drag
+  // overlay — measured via ResizeObserver instead of CSS container-query
+  // units, which collapse the wrapper's size when it has no explicit width
+  useEffect(() => {
+    if (stage !== 'review') return
+    const el = outputCanvasRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(entries => {
+      for (const entry of entries) {
+        const w = entry.contentRect ? entry.contentRect.width : entry.target.getBoundingClientRect().width
+        setPreviewWidth(w)
+      }
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [stage])
 
   function applyPreset(f) {
     setFilterValues({ ...f.values, smooth: filterValues.smooth })
@@ -555,6 +776,78 @@ export default function App() {
   function resetFilters() {
     setFilterValues({ ...DEFAULT_VALUES })
     setActivePreset('none')
+  }
+
+  // --- stickers: add to library / place on canvas / drag / resize / remove ---
+  function placeSticker(entry) {
+    setPlacedStickers(list => {
+      if (list.length >= 14) return list
+      const n = list.length
+      const xf = 0.5 + ((n % 3) - 1) * 0.16
+      const yf = 0.5 + (Math.floor(n / 3) % 3 - 1) * 0.16
+      return [...list, {
+        uid: nextUid('sticker'),
+        kind: entry.kind,
+        content: entry.content,
+        img: entry.img || null,
+        xf, yf,
+        size: entry.kind === 'image' ? 20 : 14,
+      }]
+    })
+  }
+
+  function addCustomEmojiSticker() {
+    const text = customStickerText.trim()
+    if (!text) return
+    const entry = { id: nextUid('custom'), kind: 'emoji', content: text }
+    setStickerLibrary(lib => [...lib, entry])
+    placeSticker(entry)
+    setCustomStickerText('')
+  }
+
+  function handleStickerImageUpload(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      const img = new Image()
+      img.onload = () => {
+        const entry = { id: nextUid('img'), kind: 'image', content: reader.result, img }
+        setStickerLibrary(lib => [...lib, entry])
+        placeSticker(entry)
+      }
+      img.src = reader.result
+    }
+    reader.readAsDataURL(file)
+    e.target.value = ''
+  }
+
+  function removeSticker(uid) {
+    setPlacedStickers(list => list.filter(s => s.uid !== uid))
+    setActiveStickerId(cur => (cur === uid ? null : cur))
+  }
+
+  function resizeSticker(uid, delta) {
+    setPlacedStickers(list => list.map(s => s.uid === uid ? { ...s, size: Math.min(45, Math.max(6, s.size + delta)) } : s))
+  }
+
+  function handleStickerPointerDown(e, uid) {
+    e.currentTarget.setPointerCapture?.(e.pointerId)
+    setActiveStickerId(uid)
+    setDraggingId(uid)
+  }
+  function handleStickerPointerMove(e, uid) {
+    if (draggingId !== uid || !overlayRef.current) return
+    const rect = overlayRef.current.getBoundingClientRect()
+    if (rect.width === 0 || rect.height === 0) return
+    let xf = (e.clientX - rect.left) / rect.width
+    let yf = (e.clientY - rect.top) / rect.height
+    xf = Math.min(1, Math.max(0, xf))
+    yf = Math.min(1, Math.max(0, yf))
+    setPlacedStickers(list => list.map(s => s.uid === uid ? { ...s, xf, yf } : s))
+  }
+  function handleStickerPointerUp(e, uid) {
+    if (draggingId === uid) setDraggingId(null)
   }
 
   async function runCountdown(duration) {
@@ -586,7 +879,8 @@ export default function App() {
     fireFlash()
     await sleep(90)
     const captureLayout = withCell(layout, captureCellRef.current)
-    const cell = captureRaw(videoRef.current, captureLayout.cellW, captureLayout.cellH, mirror)
+    const digitalZoom = zoomCaps ? 1 : zoom
+    const cell = captureRaw(videoRef.current, captureLayout.cellW, captureLayout.cellH, mirror, digitalZoom)
     setBusy(false)
     setPendingCell(cell)
   }
@@ -595,8 +889,9 @@ export default function App() {
     if (isCapturing || !streamRef.current) return
     pendingCellsRef.current = []
     // lock in the capture resolution for this whole sequence, based on the
-    // phone's actual current camera feed (so it matches the real device)
-    captureCellRef.current = resolveCaptureCell(layout.id, videoRef.current)
+    // phone's actual current camera feed AND the aspect ratio really shown
+    // on screen right now (so it matches the real device, no more "zoom")
+    captureCellRef.current = resolveCaptureCell(layout.id, videoRef.current, screenRef.current)
     captureOneShot(0)
   }
 
@@ -617,9 +912,8 @@ export default function App() {
       setShotStatus('selesai')
       setCapturedCells(cells)
       setCapturedLayout(withCell(layout, captureCellRef.current))
-      setCapturedFilterCss(filterCss)
-      setCapturedSmooth(filterValues.smooth)
-      setOutputNote('Pilih bingkai, lalu unduh.')
+      setCapturedFilterValues(filterValues)
+      setOutputNote('Pilih bingkai, atur ukurannya, lalu tempel stiker sesukamu.')
       setStage('review')
     }
   }
@@ -628,6 +922,9 @@ export default function App() {
     setStage('shoot')
     setCapturedCells(null)
     setShotStatus('siap')
+    setPlacedStickers([])
+    setActiveStickerId(null)
+    setReviewFrameScale(1)
   }
 
   function handleDownload() {
@@ -649,16 +946,16 @@ export default function App() {
     <div className="wrap">
       <header>
         <div>
-          <div className="wordmark">snap<span>booth</span></div>
-          <div className="tagline">Studio foto digital di browser kamu — atur filter, jepret, lalu pilih bingkai untuk hasilnya.</div>
+          <div className="wordmark"><span className="logo-mark">◎</span>snap<span>booth</span></div>
+          <div className="tagline">Studio foto digital di browser kamu — atur filter, jepret, lalu pilih bingkai &amp; stiker untuk hasilnya.</div>
         </div>
       </header>
 
       {stage === 'shoot' ? (
-        <div className="stage">
+        <div className="stage" key="shoot">
           <div className="booth">
-            <div className="screen">
-              <video ref={videoRef} autoPlay playsInline muted className={mirror ? 'mirror' : ''} />
+            <div className="screen" ref={screenRef}>
+              <video ref={videoRef} autoPlay playsInline muted />
               {pendingCell && (
                 <div className="shot-confirm-overlay">
                   <canvas ref={pendingCanvasRef} className="shot-confirm-canvas"></canvas>
@@ -670,7 +967,7 @@ export default function App() {
               {permDenied && (
                 <div className="perm-msg">
                   <div>Butuh izin kamera untuk mulai motret.</div>
-                  <button onClick={() => startCamera('user')}>Aktifkan kamera</button>
+                  <button onClick={() => startCamera('front')}>Aktifkan kamera</button>
                 </div>
               )}
             </div>
@@ -678,19 +975,25 @@ export default function App() {
               <span><span className="rec-dot"></span>LIVE VIEWFINDER</span>
               <span>{shotStatus}</span>
             </div>
-            {pendingCell && (
+
+            {pendingCell ? (
               <div className="shot-confirm-actions">
                 <button className="ghost-btn" onClick={handleRetakeShot}>↺ Ambil ulang</button>
                 <button className="shutter-btn small" onClick={handleNextShot}>
                   {captureIndex + 1 < layout.shots ? 'Lanjut ke foto berikutnya' : 'Selesai, lihat hasil'}
                 </button>
               </div>
+            ) : (
+              <div className="shutter-row">
+                <button className="shutter-btn" onClick={handleShutter} disabled={isCapturing || permDenied}>Jepret</button>
+                <div className="shutter-hint">{layout.shots === 1 ? '1 foto akan diambil' : `${layout.shots} foto berurutan — tiap foto bisa diambil ulang`}</div>
+              </div>
             )}
           </div>
 
           <div className="rail">
-            <div>
-              <span className="group-title">Jenis foto</span>
+            <div className="control-card">
+              <span className="group-title">🖼️ Jenis foto</span>
               <div className="seg">
                 {LAYOUTS.map(l => (
                   <button key={l.id} className={l.id === layoutId ? 'active' : ''} disabled={isCapturing} onClick={() => setLayoutId(l.id)}>
@@ -700,16 +1003,30 @@ export default function App() {
               </div>
             </div>
 
-            <div className="preview-block">
-              <span className="group-title">Pratinjau sebelum jepret</span>
-              <div className="preview-frame">
-                <canvas ref={previewCanvasRef} className="preview-canvas"></canvas>
+            <div className="control-card">
+              <span className="group-title">🎥 Kamera</span>
+              <div className="seg">
+                <button className={camMode === 'front' ? 'active' : ''} disabled={isCapturing || switchingCam} onClick={() => selectCamera('front')}>Depan</button>
+                <button className={camMode === 'back' ? 'active' : ''} disabled={isCapturing || switchingCam} onClick={() => selectCamera('back')}>Belakang</button>
+                {camGroups.wide && (
+                  <button className={camMode === 'wide' ? 'active' : ''} disabled={isCapturing || switchingCam} onClick={() => selectCamera('wide')}>Wide</button>
+                )}
               </div>
-              <div className="preview-note">Bingkai dipilih setelah foto diambil — ini pratinjau layout &amp; filter saja.</div>
+
+              <div className="zoom-row">
+                <button className="zoom-btn" disabled={isCapturing || zoom <= zoomMin} onClick={() => setZoomValue(zoom - (zoomCaps ? zoomStep : 0.2))}>−</button>
+                <input
+                  type="range" min={zoomMin} max={zoomMax} step={zoomStep}
+                  value={zoom} disabled={isCapturing}
+                  onChange={e => setZoomValue(Number(e.target.value))}
+                />
+                <button className="zoom-btn" disabled={isCapturing || zoom >= zoomMax} onClick={() => setZoomValue(zoom + (zoomCaps ? zoomStep : 0.2))}>+</button>
+                <span className="zoom-value">{zoom.toFixed(1)}x</span>
+              </div>
             </div>
 
-            <div>
-              <span className="group-title">Filter</span>
+            <div className="control-card">
+              <span className="group-title">🎨 Filter</span>
               <div className="swatch-row">
                 {FILTERS.map(f => (
                   <button key={f.id} className={'swatch' + (f.id === activePreset ? ' active' : '')} onClick={() => applyPreset(f)}>
@@ -749,8 +1066,8 @@ export default function App() {
               )}
             </div>
 
-            <div>
-              <span className="group-title">Hitung mundur</span>
+            <div className="control-card">
+              <span className="group-title">⏱️ Hitung mundur</span>
               <div className="seg">
                 {TIMER_OPTIONS.map(t => (
                   <button key={t.value} className={t.value === timerSec ? 'active' : ''} disabled={isCapturing} onClick={() => setTimerSec(t.value)}>
@@ -759,20 +1076,43 @@ export default function App() {
                 ))}
               </div>
             </div>
-
-            <button className="shutter-btn" onClick={handleShutter} disabled={isCapturing || permDenied}>Jepret</button>
-            <div className="shutter-hint">{layout.shots === 1 ? '1 foto akan diambil' : `${layout.shots} foto berurutan — tiap foto bisa diambil ulang`}</div>
           </div>
         </div>
       ) : (
-        <div className="stage">
+        <div className="stage" key="review">
           <div className="review-canvas-wrap">
-            <canvas ref={outputCanvasRef} className="review-canvas"></canvas>
+            <div className="sticker-canvas-shell">
+              <canvas ref={outputCanvasRef} className="review-canvas"></canvas>
+              <div className="sticker-overlay" ref={overlayRef} onPointerDown={() => setActiveStickerId(null)}>
+                {placedStickers.map(s => (
+                  <div
+                    key={s.uid}
+                    className={'placed-sticker' + (activeStickerId === s.uid ? ' active' : '')}
+                    style={{ left: `${s.xf * 100}%`, top: `${s.yf * 100}%`, fontSize: `${previewWidth ? (s.size / 100) * previewWidth : s.size * 2}px` }}
+                    onPointerDown={e => { e.stopPropagation(); handleStickerPointerDown(e, s.uid) }}
+                    onPointerMove={e => handleStickerPointerMove(e, s.uid)}
+                    onPointerUp={e => handleStickerPointerUp(e, s.uid)}
+                    onPointerCancel={e => handleStickerPointerUp(e, s.uid)}
+                  >
+                    {s.kind === 'image'
+                      ? <img src={s.content} alt="stiker" draggable={false} />
+                      : s.content}
+                    {activeStickerId === s.uid && (
+                      <div className="sticker-controls" onPointerDown={e => e.stopPropagation()}>
+                        <button onClick={() => resizeSticker(s.uid, -2)} aria-label="Perkecil">−</button>
+                        <button onClick={() => resizeSticker(s.uid, 2)} aria-label="Perbesar">+</button>
+                        <button onClick={() => removeSticker(s.uid)} aria-label="Hapus">🗑</button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
 
           <div className="rail">
-            <div>
-              <span className="group-title">Pilih bingkai</span>
+            <div className="control-card">
+              <span className="group-title">🧩 Pilih bingkai</span>
               <div className="frame-row">
                 {FRAMES.map(fr => (
                   <button key={fr.id} className={'frame-chip' + (fr.id === reviewFrame ? ' active' : '')} onClick={() => setReviewFrame(fr.id)}>
@@ -781,7 +1121,45 @@ export default function App() {
                   </button>
                 ))}
               </div>
+
+              <div className="frame-scale-row">
+                <span className="frame-scale-label">📐 Ukuran</span>
+                <input type="range" min={0.6} max={1.8} step={0.1} value={reviewFrameScale} onChange={e => setReviewFrameScale(Number(e.target.value))} />
+                <span className="frame-scale-value">{Math.round(reviewFrameScale * 100)}%</span>
+              </div>
             </div>
+
+            <div className="control-card">
+              <span className="group-title">✨ Stiker</span>
+              <div className="sticker-row">
+                {stickerLibrary.map(s => (
+                  <button key={s.id} className="sticker-chip" onClick={() => placeSticker(s)} title="Tambah ke foto">
+                    {s.kind === 'image' ? <img src={s.content} alt="" /> : s.content}
+                  </button>
+                ))}
+                <label className="sticker-chip sticker-upload" title="Unggah gambar stiker">
+                  <input type="file" accept="image/*" onChange={handleStickerImageUpload} hidden />
+                  🖼️+
+                </label>
+              </div>
+
+              <div className="sticker-custom-row">
+                <input
+                  type="text" maxLength={6} placeholder="Emoji / teks custom"
+                  value={customStickerText} onChange={e => setCustomStickerText(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') addCustomEmojiSticker() }}
+                />
+                <button className="ghost-btn small" onClick={addCustomEmojiSticker}>Tambah</button>
+              </div>
+
+              {placedStickers.length > 0 && (
+                <>
+                  <div className="preview-note">Geser stiker langsung di foto untuk memindahkannya. Ketuk stiker untuk memperbesar, memperkecil, atau menghapus.</div>
+                  <button className="reset-link" onClick={() => setPlacedStickers([])}>Hapus semua stiker</button>
+                </>
+              )}
+            </div>
+
             <div className="output-note">{outputNote}</div>
             <button className="shutter-btn" onClick={handleDownload}>Unduh foto (HD)</button>
             <button className="ghost-btn" onClick={handleRetake}>Jepret ulang</button>
